@@ -56,6 +56,17 @@ Server will start on `http://localhost:5000`
 - `PUT /:id/resolve` - Resolve alert (protected)
 - `DELETE /:id` - Delete alert (protected)
 
+### Devices (`/api/devices`)
+
+- `POST /api/devices/register` - Register a new device (admin only). Returns `deviceId` and `secret` (secret shown once).
+- `GET /api/devices` - List devices (admin only).
+- `DELETE /api/devices/:id` - Delete a device (admin only).
+- `POST /api/devices/ingest` - Public ingest endpoint for devices. Devices must send header `x-device-key: <deviceId>:<secret>` and post the same body as `/api/history`.
+
+Device flow notes:
+- Use `POST /api/devices/register` as an admin to create a device and obtain the secret. Store the secret securely on the device.
+- Device should call `POST /api/devices/ingest` with header `x-device-key` in format `deviceId:secret`.
+
 ## 🔐 Role-Based Access Control
 
 ### Roles
