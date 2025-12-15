@@ -69,8 +69,10 @@ export const ingestData = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide gas, temp, and humidity values' });
     }
 
+    const userId = req.body.userId ? String(req.body.userId).trim() : (device.owner || undefined);
+
     const sensorData = await SensorHistory.create({
-      userId: device.owner || null,
+      userId: userId || undefined,
       gas,
       temp,
       humidity,

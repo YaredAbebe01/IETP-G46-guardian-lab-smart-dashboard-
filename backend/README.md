@@ -66,6 +66,7 @@ Server will start on `http://localhost:5000`
 Device flow notes:
 - Use `POST /api/devices/register` as an admin to create a device and obtain the secret. Store the secret securely on the device.
 - Device should call `POST /api/devices/ingest` with header `x-device-key` in format `deviceId:secret`.
+- Optional: include `userId` in the body to associate the reading with a user; otherwise the device owner's user will be used if available.
 
 ## 🔐 Role-Based Access Control
 
