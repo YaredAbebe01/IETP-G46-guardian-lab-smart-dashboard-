@@ -13,7 +13,7 @@ npm install
 ### 2. Environment Setup
 The `.env` file is already configured with MongoDB credentials:
 ```env
-MONGODB_URI=mongodb+srv://yaredabebe0101_db_user:PbcHcZCCud2Ek0z2@cluster0.4xuikk3.mongodb.net/smart-lab-monitoring
+MONGODB_URI=your-mongo-url
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production-2024
 PORT=5000
 NODE_ENV=development
