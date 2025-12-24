@@ -18,13 +18,18 @@ import {
 export const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, canAccessSettings, canControlDevices } = useAuth();
 
-  const navigation = [
+  const baseNavigation = [
     { name: "Dashboard", href: "/" },
     { name: "History", href: "/history" },
     { name: "Settings", href: "/settings" },
   ];
+
+  const navigation = baseNavigation.filter(item => {
+    if (item.name === 'Settings') return canAccessSettings() || canControlDevices();
+    return true;
+  });
 
   const isActive = (path: string) => pathname === path;
 

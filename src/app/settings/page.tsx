@@ -29,7 +29,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export default function SettingsPage() {
   const { isDemoMode, isConnected } = useWebSerialContext();
-  const { token, isAuthenticated, user, canAccessSettings } = useAuth();
+  const { token, isAuthenticated, user, canAccessSettings, canControlDevices } = useAuth();
   const router = useRouter();
   
   const [isLoading, setIsLoading] = useState(false);
@@ -47,17 +47,17 @@ export default function SettingsPage() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [autoConnect, setAutoConnect] = useState(false);
 
-  // Redirect if not admin
+  // Redirect if not admin or technician
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/login');
-    } else if (!canAccessSettings()) {
-      toast.error('Access denied: Admin role required');
+    } else if (!canAccessSettings() && !canControlDevices()) {
+      toast.error('Access denied');
       router.push('/');
     }
-  }, [isAuthenticated, canAccessSettings, router]);
+  }, [isAuthenticated, canAccessSettings, canControlDevices, router]);
 
-  // Load settings from backend
+  // Load settings from backend (admin-only)
   useEffect(() => {
     if (!isAuthenticated || !token || !canAccessSettings()) return;
 
@@ -91,6 +91,66 @@ export default function SettingsPage() {
 
     loadSettings();
   }, [isAuthenticated, token, canAccessSettings]);
+
+  // Load devices for control if user can control devices (admin + technician)
+  const [devices, setDevices] = useState<any[]>([]);
+  const [isLoadingDevices, setIsLoadingDevices] = useState(false);
+  const [isSendingCommand, setIsSendingCommand] = useState(false);
+
+  const handleControl = async (deviceId: string, payload: { fan?: boolean; buzzer?: boolean }) => {
+    if (!canControlDevices()) {
+      toast.error('Access denied');
+      return;
+    }
+    setIsSendingCommand(true);
+    try {
+      const res = await fetch(`${API_URL}/api/devices/${deviceId}/control`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        toast.success('Command sent');
+      } else {
+        const data = await res.json();
+        toast.error(data.message || 'Failed to send command');
+      }
+    } catch (err) {
+      console.error('Control error:', err);
+      toast.error('Failed to send command');
+    } finally {
+      setIsSendingCommand(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated || !token) return;
+    if (!canControlDevices()) return;
+
+    const loadDevices = async () => {
+      setIsLoadingDevices(true);
+      try {
+        const response = await fetch(`${API_URL}/api/devices/my`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setDevices(data.data || []);
+        }
+      } catch (err) {
+        console.error('Error loading devices:', err);
+        toast.error('Failed to load devices');
+      } finally {
+        setIsLoadingDevices(false);
+      }
+    };
+
+    loadDevices();
+  }, [isAuthenticated, token, canControlDevices]);
 
   const handleSaveSettings = async () => {
     if (!canAccessSettings()) {
@@ -168,7 +228,7 @@ export default function SettingsPage() {
     }
   };
 
-  if (!isAuthenticated || !canAccessSettings()) {
+  if (!isAuthenticated || (!canAccessSettings() && !canControlDevices())) {
     return null;
   }
 
@@ -192,14 +252,24 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        {/* Admin Only Alert */}
-        <Alert className="mb-6 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
-          <Shield className="h-4 w-4" />
-          <AlertDescription>
-            <strong>Admin Access Required:</strong> Only administrators can modify system settings.
-            Current role: <strong className="text-yellow-700 dark:text-yellow-400">👑 Admin</strong>
-          </AlertDescription>
-        </Alert>
+        {/* Role-based Alert */}
+        {canAccessSettings() ? (
+          <Alert className="mb-6 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+            <Shield className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Admin Access Required:</strong> Only administrators can modify system settings.
+              Current role: <strong className="text-yellow-700 dark:text-yellow-400">👑 Admin</strong>
+            </AlertDescription>
+          </Alert>
+        ) : canControlDevices() ? (
+          <Alert className="mb-6 border-blue-500 bg-blue-50 dark:bg-blue-950/20">
+            <Shield className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Limited Access:</strong> You can control devices but cannot modify system thresholds. Contact an administrator to change global settings.
+              Current role: <strong className="text-blue-700 dark:text-blue-400">🔧 Technician</strong>
+            </AlertDescription>
+          </Alert>
+        ) : null }
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
@@ -207,6 +277,44 @@ export default function SettingsPage() {
           </div>
         ) : (
           <>
+            {/* Device Controls (admin + technician) */}
+            {canControlDevices() && (
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Wifi className="h-5 w-5" />
+                    Device Controls
+                  </CardTitle>
+                  <CardDescription>Control devices (fan, buzzer) remotely</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {isLoadingDevices ? (
+                    <div className="py-6 text-center">Loading devices...</div>
+                  ) : devices.length === 0 ? (
+                    <div className="py-6 text-center">No devices available to control</div>
+                  ) : (
+                    <div className="space-y-4">
+                      {devices.map(device => (
+                        <div key={device.deviceId} className="flex items-center justify-between gap-4 p-4 rounded-lg border bg-card">
+                          <div>
+                            <p className="font-medium">{device.name}</p>
+                            <p className="text-xs text-muted-foreground">ID: {device.deviceId}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Button size="sm" variant="outline" onClick={() => handleControl(device.deviceId, { fan: true })}>Fan ON</Button>
+                            <Button size="sm" variant="outline" onClick={() => handleControl(device.deviceId, { fan: false })}>Fan OFF</Button>
+                            <Button size="sm" variant="outline" onClick={() => handleControl(device.deviceId, { buzzer: true })}>Alarm ON</Button>
+                            <Button size="sm" variant="outline" onClick={() => handleControl(device.deviceId, { buzzer: false })}>Alarm OFF</Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+            {canAccessSettings() && (
+              <>
             {/* Sensor Thresholds */}
             <Card className="mb-6">
               <CardHeader>
@@ -361,31 +469,37 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
 
-            {/* Action Buttons */}
-            <div className="flex gap-4">
-              <Button 
-                onClick={handleResetSettings} 
-                variant="outline" 
-                disabled={isSaving}
-                className="flex-1"
-              >
-                {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Reset to Defaults
-              </Button>
-              <Button 
-                onClick={handleSaveSettings} 
-                size="lg" 
-                className="gap-2 flex-1"
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Save Settings
-              </Button>
-            </div>
+              {/* Action Buttons (admin only) */}
+              <div className="flex gap-4">
+                <Button 
+                  onClick={handleResetSettings} 
+                  variant="outline" 
+                  disabled={isSaving}
+                  className="flex-1"
+                >
+                  {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                  Reset to Defaults
+                </Button>
+                <Button 
+                  onClick={handleSaveSettings} 
+                  size="lg" 
+                  className="gap-2 flex-1"
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Save Settings
+                </Button>
+              </div>
+              </>
+            )}
+
+
+
+
           </>
         )}
       </main>

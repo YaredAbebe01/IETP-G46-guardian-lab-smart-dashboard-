@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import Device from '../models/Device.js';
 import SensorHistory from '../models/SensorHistory.js';
+import DeviceCommand from '../models/DeviceCommand.js';
 
 // Admin registers a device and receives deviceId + secret (secret only shown once)
 export const registerDevice = async (req, res) => {
@@ -39,6 +40,52 @@ export const listDevices = async (req, res) => {
   }
 };
 
+// List devices for current user (admin gets all, others get owned devices)
+export const listMyDevices = async (req, res) => {
+  try {
+    let devices;
+    if (req.user && req.user.role === 'admin') {
+      devices = await Device.find().select('-secretHash');
+    } else {
+      devices = await Device.find({ owner: req.user.id }).select('-secretHash');
+    }
+    res.status(200).json({ success: true, data: devices });
+  } catch (error) {
+    console.error('List my devices error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching devices', error: error.message });
+  }
+};
+
+// Control device (admin + technician)
+export const controlDevice = async (req, res) => {
+  try {
+    const { id } = req.params; // deviceId
+    const { fan, buzzer } = req.body;
+
+    const device = await Device.findOne({ deviceId: id });
+    if (!device) {
+      return res.status(404).json({ success: false, message: 'Device not found' });
+    }
+
+    if (fan === undefined && buzzer === undefined) {
+      return res.status(400).json({ success: false, message: 'No command specified' });
+    }
+
+    const cmd = await DeviceCommand.create({
+      deviceId: device.deviceId,
+      command: { fan: fan !== undefined ? Boolean(fan) : undefined, buzzer: buzzer !== undefined ? Boolean(buzzer) : undefined },
+      issuedBy: req.user.id,
+      status: 'pending'
+    });
+
+    // TODO: integrate with device delivery mechanism (MQTT, WebSocket, push)
+
+    res.status(200).json({ success: true, message: 'Command queued', data: cmd });
+  } catch (error) {
+    console.error('Control device error:', error);
+    res.status(500).json({ success: false, message: 'Error queuing command', error: error.message });
+  }
+};
 // Ingest sensor data from deviceKey header (public endpoint)
 export const ingestData = async (req, res) => {
   try {
