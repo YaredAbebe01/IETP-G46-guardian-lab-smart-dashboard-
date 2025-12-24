@@ -107,8 +107,25 @@ export default function HistoryPage() {
     };
   }, [historyEvents, dbHistory]);
 
+  // Normalize DB history into the same shape used by timeline events
+  const mappedDbHistory = useMemo(() => dbHistory.map(r => ({
+    id: r._id || r.id,
+    message: `T: ${r.temp}°C • H: ${r.humidity}% • Gas: ${r.gas}`,
+    sensor: 'Sensors',
+    severity: 'info',
+    value: '',
+    location: r.deviceId || '',
+    timestamp: new Date(r.timestamp).toISOString()
+  })), [dbHistory]);
+
+  // Combine live and DB events and sort by timestamp desc
+  const combinedEvents = useMemo(() => {
+    const combined = [...historyEvents, ...mappedDbHistory];
+    return combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [historyEvents, mappedDbHistory]);
+
   const handleExportCSV = () => {
-    const csvData = historyEvents.map(e => 
+    const csvData = combinedEvents.map(e => 
       `${e.timestamp},${e.sensor},${e.message},${e.severity},${e.value || ''}`
     ).join('\n');
     
@@ -168,7 +185,7 @@ export default function HistoryPage() {
             </p>
           </div>
           
-          <Button onClick={handleExportCSV} disabled={historyEvents.length === 0}>
+          <Button onClick={handleExportCSV} disabled={combinedEvents.length === 0}>
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
@@ -235,7 +252,7 @@ export default function HistoryPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {historyEvents.length === 0 ? (
+            {combinedEvents.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p className="text-lg font-medium mb-2">No events recorded yet</p>
@@ -249,11 +266,11 @@ export default function HistoryPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {historyEvents.map((record) => {
+                {combinedEvents.map((record) => {
                   const Icon = getIcon(record.sensor);
                   return (
                     <div
-                      key={record.id}
+                      key={record.id || record._id}
                       className="flex items-start gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
                     >
                       <div className={`h-10 w-10 rounded-lg ${getSeverityColor(record.severity)} flex items-center justify-center flex-shrink-0`}>

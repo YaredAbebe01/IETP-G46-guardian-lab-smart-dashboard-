@@ -2,19 +2,30 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Wifi, Activity, Clock } from "lucide-react";
+function formatRelativeTime(ts?: string | null) {
+  if (!ts) return 'Never';
+  const diff = Date.now() - new Date(ts).getTime();
+  if (diff < 60000) return 'Just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return new Date(ts).toLocaleString();
+}
 
-export function SystemStatusCards() {
+export function SystemStatusCards({ isConnected = false, activeSensors = 0, lastUpdate = null } : { isConnected?: boolean; activeSensors?: number; lastUpdate?: string | null }) {
+  const connectionColor = isConnected ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
+  const dotClass = isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500';
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-950/30 flex items-center justify-center">
-              <Wifi className="h-5 w-5 text-green-600 dark:text-green-400" />
+            <div className={`h-10 w-10 rounded-lg ${isConnected ? 'bg-green-100 dark:bg-green-950/30' : 'bg-red-100 dark:bg-red-950/20'} flex items-center justify-center`}>
+              <Wifi className={`h-5 w-5 ${isConnected ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
             </div>
             <div className="flex-1">
               <p className="text-sm text-muted-foreground">Connection Status</p>
-              <p className="text-lg font-semibold text-green-600 dark:text-green-400">Connected</p>
+              <p className={`text-lg font-semibold ${connectionColor}`}>{isConnected ? 'Connected' : 'Disconnected'}</p>
             </div>
           </div>
         </CardContent>
@@ -28,7 +39,7 @@ export function SystemStatusCards() {
             </div>
             <div className="flex-1">
               <p className="text-sm text-muted-foreground">Active Sensors</p>
-              <p className="text-lg font-semibold">4/4</p>
+              <p className="text-lg font-semibold">{activeSensors}/4</p>
             </div>
           </div>
         </CardContent>
@@ -42,7 +53,7 @@ export function SystemStatusCards() {
             </div>
             <div className="flex-1">
               <p className="text-sm text-muted-foreground">Last Update</p>
-              <p className="text-lg font-semibold">Just now</p>
+              <p className="text-lg font-semibold">{formatRelativeTime(lastUpdate)}</p>
             </div>
           </div>
         </CardContent>
