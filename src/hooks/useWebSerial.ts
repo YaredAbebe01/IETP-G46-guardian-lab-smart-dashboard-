@@ -34,6 +34,8 @@ export function useWebSerial() {
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const bufferRef = useRef<string>('');
   const demoIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Timestamp of the last received data (used to infer connection state)
+  const lastDataAtRef = useRef<number | null>(null);
   
   // Fan timing logic: track when fan turned on
   const fanTurnOnTimeRef = useRef<number | null>(null);
@@ -164,6 +166,10 @@ export function useWebSerial() {
   }, [currentData, calculateFanStatus]);
 
   const processNewData = useCallback((data: SensorData) => {
+    // Mark last received time and treat incoming data as evidence of a connection
+    lastDataAtRef.current = Date.now();
+    setIsConnected(true);
+
     setCurrentData(data);
     setHistory(prev => {
       const newHistory = [...prev, data];
@@ -255,6 +261,7 @@ export function useWebSerial() {
     setIsConnected(false);
     setCurrentData(null);
     fanTurnOnTimeRef.current = null; // Reset fan timer
+    lastDataAtRef.current = null; // Clear last-data timestamp
     toast.info('Demo mode stopped');
   }, []);
 
@@ -383,6 +390,7 @@ export function useWebSerial() {
 
       setIsConnected(false);
       bufferRef.current = '';
+      lastDataAtRef.current = null;
       fanTurnOnTimeRef.current = null; // Reset fan timer
       toast.info('Device disconnected');
     } catch (error) {
@@ -390,6 +398,23 @@ export function useWebSerial() {
       toast.error('Error disconnecting device');
     }
   }, [isDemoMode, stopDemoMode]);
+
+  // Periodic heartbeat: if data was received recently, mark as connected; otherwise mark disconnected.
+  useEffect(() => {
+    const CHECK_INTERVAL = 1000; // ms
+    const TIMEOUT = 5000; // ms since last data to consider disconnected (changed to 5s)
+    const interval = setInterval(() => {
+      if (isDemoMode) return; // demo mode manages its own state
+      const last = lastDataAtRef.current;
+      if (last && (Date.now() - last) < TIMEOUT) {
+        if (!isConnected) setIsConnected(true);
+      } else {
+        if (isConnected) setIsConnected(false);
+      }
+    }, CHECK_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [isDemoMode, isConnected]);
 
   // Cleanup on unmount - ONLY when the provider itself unmounts (app closes)
   // Remove disconnect from dependencies to prevent cleanup on every re-render
@@ -417,6 +442,38 @@ export function useWebSerial() {
     };
   }, []); // Empty dependency array - only run on mount/unmount of provider
 
+  const feedExternalData = useCallback((data: Partial<SensorData> & { timestamp?: string | number }) => {
+    // Accept partial data from backend and normalize
+    const normalized: SensorData = {
+      gas: Number(data.gas ?? 0),
+      temp: Number(data.temp ?? 0),
+      hum: Number(data.hum ?? 0),
+      fan: Boolean((data as any).fan || (data as any).fanStatus || false),
+      buzzer: Boolean((data as any).buzzer || (data as any).buzzerStatus || false),
+      timestamp: typeof data.timestamp === 'number' ? data.timestamp : (data.timestamp ? Date.parse(String(data.timestamp)) : Date.now()),
+    };
+
+    // Use the same logic as processNewData and mark as live
+    lastDataAtRef.current = Date.now();
+    setIsConnected(true);
+    processNewData(normalized);
+  }, [processNewData]);
+
+  // Feed historical records into the pipeline WITHOUT marking the device as connected
+  const feedHistoricalData = useCallback((data: Partial<SensorData> & { timestamp?: string | number }) => {
+    const normalized: SensorData = {
+      gas: Number(data.gas ?? 0),
+      temp: Number(data.temp ?? 0),
+      hum: Number(data.hum ?? 0),
+      fan: Boolean((data as any).fan || (data as any).fanStatus || false),
+      buzzer: Boolean((data as any).buzzer || (data as any).buzzerStatus || false),
+      timestamp: typeof data.timestamp === 'number' ? data.timestamp : (data.timestamp ? Date.parse(String(data.timestamp)) : Date.now()),
+    };
+
+    // Only process data (append to history, update currentData) without updating lastDataAtRef or isConnected
+    processNewData(normalized);
+  }, [processNewData]);
+
   return {
     isConnected,
     currentData,
@@ -427,5 +484,9 @@ export function useWebSerial() {
     isDemoMode,
     startDemoMode,
     stopDemoMode,
+    // Allow feeding data coming from backend (HTTP/SSE/etc.) into the same pipeline
+    feedExternalData,
+    // Feed historical data without setting the live-connected state
+    feedHistoricalData,
   };
 }

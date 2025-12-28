@@ -25,6 +25,8 @@ export default function Home() {
     disconnect,
     isDemoMode,
     startDemoMode,
+    feedExternalData,
+    feedHistoricalData,
   } = useWebSerialContext();
 
   const { token, isAuthenticated } = useAuth();
@@ -33,24 +35,103 @@ export default function Home() {
   const [isInIframe, setIsInIframe] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Load latest saved reading (most recent) for current user
+  // Load recent saved readings (history) for current user and seed charts (without marking live)
   useEffect(() => {
+    // Guard: this effect should only run in the browser and when feeder is available
+    if (typeof window === 'undefined') return;
     if (!isAuthenticated || !token) return;
-    const loadLatest = async () => {
+    if (typeof feedHistoricalData !== 'function') {
+      console.warn('feedHistoricalData not available yet');
+      return;
+    }
+
+    const loadHistory = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/history?limit=1`, {
+        const res = await fetch(`${API_URL}/api/history?limit=100`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
           const json = await res.json();
-          setLastSavedData(json.data && json.data[0] ? json.data[0] : null);
+          const rows = json.data || [];
+          if (rows.length > 0) {
+            // sort ascending by timestamp so older first
+            const sorted = rows.slice().sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+            // feed historical data into the chart pipeline without toggling live
+            sorted.forEach((r: any) => {
+              feedHistoricalData({
+                gas: r.gas,
+                temp: r.temp,
+                hum: r.humidity ?? r.hum,
+                fan: r.fanStatus,
+                buzzer: r.buzzerStatus,
+                timestamp: r.timestamp
+              });
+            });
+
+            // Keep last saved record handy for single-value display
+            setLastSavedData(rows[0]);
+          }
         }
       } catch (err) {
-        console.error('Error loading latest history:', err);
+        console.error('Error loading history:', err);
       }
     };
-    loadLatest();
-  }, [isAuthenticated, token]);
+    loadHistory();
+  }, [isAuthenticated, token, feedHistoricalData]);
+
+  // Poll backend for latest saved reading and inject it into the live pipeline so UI updates immediately
+  useEffect(() => {
+    // Run only on client and if feeder is available
+    if (typeof window === 'undefined') return;
+    if (!isAuthenticated || !token) return;
+    if (isDemoMode) return; // demo mode already provides data
+    if (typeof feedExternalData !== 'function') {
+      console.warn('feedExternalData not available yet');
+      return;
+    }
+
+    let lastServerTs: number | null = null;
+    let stopped = false;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/history?limit=1`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        const latest = json.data && json.data[0] ? json.data[0] : null;
+        if (!latest) return;
+
+        const ts = latest.timestamp ? new Date(latest.timestamp).getTime() : Date.now();
+        if (!lastServerTs || ts > lastServerTs) {
+          lastServerTs = ts;
+          // Feed it into the context so page updates immediately
+          feedExternalData({
+            gas: latest.gas,
+            temp: latest.temp,
+            hum: latest.humidity ?? latest.hum,
+            fan: latest.fanStatus,
+            buzzer: latest.buzzerStatus,
+            timestamp: latest.timestamp
+          });
+        }
+      } catch (err) {
+        console.error('Error polling latest reading:', err);
+      }
+    };
+
+    // Initial poll and periodic poll every 2s for near real-time updates
+    poll();
+    const interval = setInterval(() => {
+      if (!stopped) poll();
+    }, 2000);
+
+    return () => {
+      stopped = true;
+      clearInterval(interval);
+    };
+  }, [isAuthenticated, token, isDemoMode, feedExternalData]);
 
   // Update displayed last saved data when new live data arrives
   useEffect(() => {
@@ -111,12 +192,6 @@ export default function Home() {
           <div className="flex gap-2">
             {!isConnected && !isDemoMode && (
               <>
-                  {featureFlags.enableWebSerial && (
-                    <Button onClick={connect} variant="default" size="sm">
-                  <Usb className="h-4 w-4 mr-2" />
-                  Connect Device
-                    </Button>
-                  )}
                   {featureFlags.enableDemoMode && (
                 <Button onClick={startDemoMode} variant="outline" size="sm">
                   Demo Mode
@@ -160,95 +235,37 @@ export default function Home() {
           <p className="text-muted-foreground">Real-time laboratory monitoring</p>
         </div>
 
-        {(isConnected || isDemoMode) ? (
-          <>
-            {/* Original Functional Sensor Cards */}
+        {/* Always show sensor cards and charts. When disconnected, use lastSavedData/currentData to populate values; charts come from `history`. */}
+        <>
+          <div className="mb-8">
+            {/* Determine display data: prefer live currentData, fall back to lastSavedData */}
+            {(() => {
+              const displayData = currentData ?? (lastSavedData ? {
+                gas: Number(lastSavedData.gas ?? 0),
+                temp: Number(lastSavedData.temp ?? 0),
+                hum: Number(lastSavedData.humidity ?? lastSavedData.hum ?? 0),
+                fan: Boolean(lastSavedData.fanStatus ?? false),
+                buzzer: Boolean(lastSavedData.buzzerStatus ?? false),
+                timestamp: lastSavedData.timestamp ? Date.parse(String(lastSavedData.timestamp)) : Date.now()
+              } : null);
+
+              return <SensorCards data={displayData} />;
+            })()}
+          </div>
+
+          {/* Real-time Charts (use history array fed from live or historical data) */}
+          {history.length > 0 && (
             <div className="mb-8">
-              <SensorCards data={currentData} />
+              <h2 className="text-xl font-semibold mb-4">Real-time Charts</h2>
+              <SensorCharts history={history} />
             </div>
+          )}
 
-            {/* Real-time Charts */}
-            {history.length > 0 && (
-              <div className="mb-8">
-                <h2 className="text-xl font-semibold mb-4">Real-time Charts</h2>
-                <SensorCharts history={history} />
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            {/* Guardian Lab Live Sensor Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {(() => {
-                const displayGas = currentData?.gas ?? lastSavedData?.gas ?? '—';
-                const displayTemp = currentData?.temp ?? lastSavedData?.temp ?? '—';
-                const displayHum = currentData?.hum ?? lastSavedData?.humidity ?? '—';
-                const displayLocation = currentData ? 'Live Device' : (lastSavedData?.deviceId ?? 'Main Hall');
-                const displayTime = currentData ? formatTime(new Date(currentData.timestamp)) : (lastSavedData?.timestamp ? formatTime(new Date(lastSavedData.timestamp)) : formatTime(currentTime));
-
-                const getStatus = (type: 'gas'|'temp'|'hum') => {
-                  if (type === 'gas') {
-                    const v = Number(currentData?.gas ?? lastSavedData?.gas ?? 0);
-                    return v > 300 ? 'Critical' : 'Normal';
-                  }
-                  if (type === 'temp') {
-                    const v = Number(currentData?.temp ?? lastSavedData?.temp ?? 0);
-                    if (v > 35) return 'Critical';
-                    if (v > 30) return 'Warning';
-                    return 'Normal';
-                  }
-                  if (type === 'hum') {
-                    const v = Number(currentData?.hum ?? lastSavedData?.humidity ?? 0);
-                    if (v > 70 || v < 40) return 'Warning';
-                    return 'Normal';
-                  }
-                  return 'Normal';
-                };
-
-                return (
-                  <>
-                    <LiveSensorCard
-                      icon={Wind}
-                      label="Gas Sensor"
-                      value={String(displayGas)}
-                      unit="ppm"
-                      status={getStatus('gas')}
-                      location={displayLocation}
-                      time={displayTime}
-                    />
-                    <LiveSensorCard
-                      icon={Flame}
-                      label="Smoke Sensor"
-                      value={currentData ? String(currentData.gas) : (lastSavedData ? String(lastSavedData.gas) : '—')}
-                      unit="particles/m³"
-                      status={getStatus('gas')}
-                      location={displayLocation}
-                      time={displayTime}
-                    />
-                    <LiveSensorCard
-                      icon={Thermometer}
-                      label="Temperature"
-                      value={String(displayTemp)}
-                      unit="°C"
-                      status={getStatus('temp')}
-                      location={displayLocation}
-                      time={displayTime}
-                    />
-                    <LiveSensorCard
-                      icon={Droplets}
-                      label="Humidity"
-                      value={String(displayHum)}
-                      unit="%"
-                      status={getStatus('hum')}
-                      location={displayLocation}
-                      time={displayTime}
-                    />
-                  </>
-                );
-              })()}
-            </div>
-          </>
-        )}
+          {/* If disconnected, show a small notice so users know data is not currently live */}
+          {(!isConnected && !isDemoMode) && (
+            <p className="text-sm text-muted-foreground mb-6">Disconnected — showing last saved data and recent history.</p>
+          )}
+        </>
 
         {/* System Status Section */}
         <div className="mb-8">

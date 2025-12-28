@@ -257,9 +257,8 @@ void processCommand(String cmd) {
 #### Option A: Direct USB Connection (Recommended)
 1. Keep Arduino connected via USB
 2. Open the web dashboard in **Chrome** or **Edge** browser
-3. Click **"Connect Device"** button
-4. Select your Arduino port from the popup
-5. Data will start streaming automatically
+3. The dashboard will automatically connect to the device using the configured device credentials
+4. Data will start streaming automatically
 
 #### Option B: Demo Mode (No Hardware Required)
 1. Click **"Demo Mode"** button on dashboard
@@ -383,4 +382,4 @@ Before connecting to web dashboard:
 - [ ] Arduino IDE Serial Monitor closed
 - [ ] USB cable connected
 
-Now click **"Connect Device"** and enjoy real-time monitoring! 🎉
+The dashboard will automatically connect to your device (if credentials are configured) and display real-time monitoring! 🎉

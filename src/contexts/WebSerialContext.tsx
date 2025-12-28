@@ -14,6 +14,10 @@ interface WebSerialContextType {
   isDemoMode: boolean;
   startDemoMode: () => void;
   stopDemoMode: () => void;
+  // Feed external sensor readings (e.g., fetched from backend) into the pipeline
+  feedExternalData: (data: Partial<SensorData> & { timestamp?: string | number }) => void;
+  // Feed historical data (won't mark device as connected)
+  feedHistoricalData: (data: Partial<SensorData> & { timestamp?: string | number }) => void;
 }
 
 const WebSerialContext = createContext<WebSerialContextType | undefined>(undefined);

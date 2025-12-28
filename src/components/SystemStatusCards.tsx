@@ -16,21 +16,7 @@ export function SystemStatusCards({ isConnected = false, activeSensors = 0, last
   const dotClass = isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500';
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex items-center gap-3">
-            <div className={`h-10 w-10 rounded-lg ${isConnected ? 'bg-green-100 dark:bg-green-950/30' : 'bg-red-100 dark:bg-red-950/20'} flex items-center justify-center`}>
-              <Wifi className={`h-5 w-5 ${isConnected ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm text-muted-foreground">Connection Status</p>
-              <p className={`text-lg font-semibold ${connectionColor}`}>{isConnected ? 'Connected' : 'Disconnected'}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center gap-3">
