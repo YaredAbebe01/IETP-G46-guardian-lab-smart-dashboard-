@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import Image from "next/image";
 
 export const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -52,8 +53,9 @@ export const Navbar = () => {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
-            <Activity className="h-6 w-6 text-primary" />
-            <span className="font-bold text-lg">Smart Lab</span>
+            {/* <Activity className="h-6 w-6 text-primary" /> */}
+            <Image src={'/logo.jpg'} width={60} height={60} alt="logo"/>
+            <span className="font-bold text-lg">Guardian Lab</span>
           </Link>
 
           {/* Desktop Navigation */}

@@ -8,8 +8,8 @@ import { WebSerialProvider } from "@/contexts/WebSerialContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 
 export const metadata: Metadata = {
-  title: "Smart Lab Monitoring",
-  description: "Smart Lab Monitoring",
+  title: "Guardian Lab Monitoring",
+  description: "Guardian Lab Monitoring",
   icons: {
     icon: '/logo.jpg',
     shortcut: '/logo.jpg',
@@ -34,7 +34,7 @@ export default function RootLayout({
           data-include-search-params="true"
           data-only-in-iframe="true"
           data-debug="true"
-          data-custom-data='{"appName": "YourApp", "version": "1.0.0", "greeting": "hi"}'
+          data-custom-data='{"appName": "Guardian", "version": "1.0.0", "greeting": "hi"}'
         />
         <AuthProvider>
           <WebSerialProvider>
