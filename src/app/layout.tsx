@@ -11,9 +11,9 @@ export const metadata: Metadata = {
   title: "Smart Lab Monitoring",
   description: "Smart Lab Monitoring",
   icons: {
-    icon: '/favicon.svg',
-    shortcut: '/favicon.svg',
-    apple: '/favicon.svg',
+    icon: '/logo.jpg',
+    shortcut: '/logo.jpg',
+    apple: '/logo.jpg',
   },
 };
 
