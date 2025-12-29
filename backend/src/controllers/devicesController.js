@@ -1,42 +1,61 @@
-import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
-import Device from '../models/Device.js';
-import SensorHistory from '../models/SensorHistory.js';
-import DeviceCommand from '../models/DeviceCommand.js';
+import crypto from "crypto";
+import bcrypt from "bcryptjs";
+import Device from "../models/Device.js";
+import SensorHistory from "../models/SensorHistory.js";
+import DeviceCommand from "../models/DeviceCommand.js";
+import Settings from "../models/Settings.js";
+import User from "../models/User.js";
 
 // Admin registers a device and receives deviceId + secret (secret only shown once)
 export const registerDevice = async (req, res) => {
   try {
     const { name, owner } = req.body;
 
-    const deviceId = crypto.randomBytes(6).toString('hex');
-    const rawSecret = crypto.randomBytes(24).toString('hex');
+    const deviceId = crypto.randomBytes(6).toString("hex");
+    const rawSecret = crypto.randomBytes(24).toString("hex");
     const secretHash = await bcrypt.hash(rawSecret, 10);
 
-    const device = await Device.create({ deviceId, name, owner: owner || null, secretHash });
+    const device = await Device.create({
+      deviceId,
+      name,
+      owner: owner || null,
+      secretHash,
+    });
 
     res.status(201).json({
       success: true,
-      message: 'Device registered',
+      message: "Device registered",
       data: {
         deviceId: device.deviceId,
-        secret: rawSecret
-      }
+        secret: rawSecret,
+      },
     });
   } catch (error) {
-    console.error('Register device error:', error);
-    res.status(500).json({ success: false, message: 'Error registering device', error: error.message });
+    console.error("Register device error:", error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error registering device",
+        error: error.message,
+      });
   }
 };
 
 // List devices (admin)
 export const listDevices = async (req, res) => {
   try {
-    const devices = await Device.find().select('-secretHash');
+    const devices = await Device.find().select("-secretHash");
     res.status(200).json({ success: true, data: devices });
   } catch (error) {
-    console.error('List devices error:', error);
-    res.status(500).json({ success: false, message: 'Error fetching devices', error: error.message });
+    console.error("List devices error:", error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error fetching devices",
+        error: error.message,
+      });
   }
 };
 
@@ -44,15 +63,21 @@ export const listDevices = async (req, res) => {
 export const listMyDevices = async (req, res) => {
   try {
     let devices;
-    if (req.user && req.user.role === 'admin') {
-      devices = await Device.find().select('-secretHash');
+    if (req.user && req.user.role === "admin") {
+      devices = await Device.find().select("-secretHash");
     } else {
-      devices = await Device.find({ owner: req.user.id }).select('-secretHash');
+      devices = await Device.find({ owner: req.user.id }).select("-secretHash");
     }
     res.status(200).json({ success: true, data: devices });
   } catch (error) {
-    console.error('List my devices error:', error);
-    res.status(500).json({ success: false, message: 'Error fetching devices', error: error.message });
+    console.error("List my devices error:", error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error fetching devices",
+        error: error.message,
+      });
   }
 };
 
@@ -64,59 +89,98 @@ export const controlDevice = async (req, res) => {
 
     const device = await Device.findOne({ deviceId: id });
     if (!device) {
-      return res.status(404).json({ success: false, message: 'Device not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: "Device not found" });
     }
 
     if (fan === undefined && buzzer === undefined) {
-      return res.status(400).json({ success: false, message: 'No command specified' });
+      return res
+        .status(400)
+        .json({ success: false, message: "No command specified" });
     }
 
     const cmd = await DeviceCommand.create({
       deviceId: device.deviceId,
-      command: { fan: fan !== undefined ? Boolean(fan) : undefined, buzzer: buzzer !== undefined ? Boolean(buzzer) : undefined },
+      command: {
+        fan: fan !== undefined ? Boolean(fan) : undefined,
+        buzzer: buzzer !== undefined ? Boolean(buzzer) : undefined,
+      },
       issuedBy: req.user.id,
-      status: 'pending'
+      status: "pending",
     });
 
     // TODO: integrate with device delivery mechanism (MQTT, WebSocket, push)
 
-    res.status(200).json({ success: true, message: 'Command queued', data: cmd });
+    res
+      .status(200)
+      .json({ success: true, message: "Command queued", data: cmd });
   } catch (error) {
-    console.error('Control device error:', error);
-    res.status(500).json({ success: false, message: 'Error queuing command', error: error.message });
+    console.error("Control device error:", error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error queuing command",
+        error: error.message,
+      });
   }
 };
 // Ingest sensor data from deviceKey header (public endpoint)
 export const ingestData = async (req, res) => {
   try {
     // Expect x-device-key header in format deviceId:secret
-    const header = req.headers['x-device-key'] || req.headers['x-device-key'.toLowerCase()];
+    const header =
+      req.headers["x-device-key"] || req.headers["x-device-key".toLowerCase()];
     if (!header) {
-      return res.status(401).json({ success: false, message: 'Missing device key' });
+      return res
+        .status(401)
+        .json({ success: false, message: "Missing device key" });
     }
 
-    const [deviceId, secret] = String(header).split(':');
+    const [deviceId, secret] = String(header).split(":");
     if (!deviceId || !secret) {
-      return res.status(400).json({ success: false, message: 'Invalid device key format' });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid device key format" });
     }
 
     const device = await Device.findOne({ deviceId });
     if (!device || device.disabled) {
-      return res.status(401).json({ success: false, message: 'Invalid device' });
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid device" });
     }
 
     const ok = await bcrypt.compare(secret, device.secretHash);
     if (!ok) {
-      return res.status(401).json({ success: false, message: 'Invalid device credentials' });
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid device credentials" });
     }
 
     // Validate payload similar to historyController
-    const { gas, temp, humidity, fanStatus, buzzerStatus, timestamp, deviceId: bodyDeviceId } = req.body;
+    const {
+      gas,
+      temp,
+      humidity,
+      fanStatus,
+      buzzerStatus,
+      timestamp,
+      deviceId: bodyDeviceId,
+    } = req.body;
     if (gas === undefined || temp === undefined || humidity === undefined) {
-      return res.status(400).json({ success: false, message: 'Please provide gas, temp, and humidity values' });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Please provide gas, temp, and humidity values",
+        });
     }
 
-    const userId = req.body.userId ? String(req.body.userId).trim() : (device.owner || undefined);
+    const userId = req.body.userId
+      ? String(req.body.userId).trim()
+      : device.owner || undefined;
 
     const sensorData = await SensorHistory.create({
       userId: userId || undefined,
@@ -126,13 +190,25 @@ export const ingestData = async (req, res) => {
       fanStatus: fanStatus !== undefined ? fanStatus : false,
       buzzerStatus: buzzerStatus !== undefined ? buzzerStatus : false,
       timestamp: timestamp ? new Date(timestamp) : new Date(),
-      deviceId: bodyDeviceId || device.deviceId
+      deviceId: bodyDeviceId || device.deviceId,
     });
 
-    res.status(201).json({ success: true, message: 'Sensor data ingested', data: sensorData });
+    res
+      .status(201)
+      .json({
+        success: true,
+        message: "Sensor data ingested",
+        data: sensorData,
+      });
   } catch (error) {
-    console.error('Device ingest error:', error);
-    res.status(500).json({ success: false, message: 'Error ingesting data', error: error.message });
+    console.error("Device ingest error:", error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error ingesting data",
+        error: error.message,
+      });
   }
 };
 
@@ -142,11 +218,104 @@ export const deleteDevice = async (req, res) => {
     const { id } = req.params;
     const device = await Device.findOneAndDelete({ deviceId: id });
     if (!device) {
-      return res.status(404).json({ success: false, message: 'Device not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: "Device not found" });
     }
-    res.status(200).json({ success: true, message: 'Device deleted' });
+    res.status(200).json({ success: true, message: "Device deleted" });
   } catch (error) {
-    console.error('Delete device error:', error);
-    res.status(500).json({ success: false, message: 'Error deleting device', error: error.message });
+    console.error("Delete device error:", error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error deleting device",
+        error: error.message,
+      });
+  }
+};
+
+// Get settings for device (authenticated via x-device-key)
+export const getDeviceSettings = async (req, res) => {
+  try {
+    // Expect x-device-key header in format deviceId:secret
+    const header =
+      req.headers["x-device-key"] || req.headers["x-device-key".toLowerCase()];
+    if (!header) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Missing device key" });
+    }
+
+    const [deviceId, secret] = String(header).split(":");
+    if (!deviceId || !secret) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid device key format" });
+    }
+
+    const device = await Device.findOne({ deviceId });
+    if (!device || device.disabled) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid device" });
+    }
+
+    const ok = await bcrypt.compare(secret, device.secretHash);
+    if (!ok) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid device credentials" });
+    }
+
+    let settings = null;
+
+    // Try to get settings from device owner first
+    if (device.owner) {
+      settings = await Settings.findOne({ userId: device.owner });
+    }
+
+    // If no owner settings, try to get first admin's settings
+    if (!settings) {
+      const admin = await User.findOne({ role: "admin" });
+      if (admin) {
+        settings = await Settings.findOne({ userId: admin._id });
+      }
+    }
+
+    // If still no settings, create default settings
+    if (!settings) {
+      settings = {
+        thresholds: {
+          gas: 300,
+          temperature: 30,
+          humidityMin: 40,
+          humidityMax: 70,
+        },
+        alertDuration: 5,
+        fanMinOnTime: 1,
+      };
+    } else {
+      // Convert to plain object with only needed fields
+      settings = {
+        thresholds: settings.thresholds,
+        alertDuration: settings.alertDuration,
+        fanMinOnTime: settings.fanMinOnTime,
+      };
+    }
+
+    res.status(200).json({
+      success: true,
+      data: settings,
+    });
+  } catch (error) {
+    console.error("Get device settings error:", error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error fetching settings",
+        error: error.message,
+      });
   }
 };

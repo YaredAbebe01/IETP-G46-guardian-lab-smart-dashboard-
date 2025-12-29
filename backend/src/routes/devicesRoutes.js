@@ -1,21 +1,37 @@
-import express from 'express';
-import { registerDevice, listDevices, ingestData, deleteDevice, listMyDevices, controlDevice } from '../controllers/devicesController.js';
-import { protect, authorize } from '../middleware/auth.js';
+import express from "express";
+import {
+  registerDevice,
+  listDevices,
+  ingestData,
+  deleteDevice,
+  listMyDevices,
+  controlDevice,
+  getDeviceSettings,
+} from "../controllers/devicesController.js";
+import { protect, authorize } from "../middleware/auth.js";
 
 const router = express.Router();
 
 // Register device (admin only)
-router.post('/register', protect, authorize('admin'), registerDevice);
-router.get('/', protect, authorize('admin'), listDevices);
-router.delete('/:id', protect, authorize('admin'), deleteDevice);
+router.post("/register", protect, authorize("admin"), registerDevice);
+router.get("/", protect, authorize("admin"), listDevices);
+router.delete("/:id", protect, authorize("admin"), deleteDevice);
 
 // Devices for authenticated user (admin sees all)
-router.get('/my', protect, listMyDevices);
+router.get("/my", protect, listMyDevices);
 
 // Public ingest endpoint for devices
-router.post('/ingest', ingestData);
+router.post("/ingest", ingestData);
+
+// Get settings for devices (public endpoint with device authentication)
+router.get("/settings", getDeviceSettings);
 
 // Control device - admin + technician
-router.post('/:id/control', protect, authorize('admin','technician'), controlDevice);
+router.post(
+  "/:id/control",
+  protect,
+  authorize("admin", "technician"),
+  controlDevice
+);
 
 export default router;
