@@ -118,6 +118,7 @@ MIT License - Feel free to use this project for learning and development.
 
 ---
 
-**Built with ❤️ for IoT monitoring and laboratory safety**
+**Built with 
+for IoT monitoring and laboratory safety**
 
 🌟 **Star this repo if you find it helpful!**
